@@ -95,24 +95,27 @@ excel_data = pd.read_excel(r'E:\code\analysis report\期权持仓.xlsx')  # 替�
 for index, row in tqdm(excel_data.iterrows(), total=excel_data.shape[0]):
     # 解析ETF类型、行权价格、到期日和期权类型
     option_type, strike_price, expiration_month = parse_asset_name(row['资产名称'])
-
+    direction = row['方向']  # 假设您的Excel表中有一个列名为'方向'，包含'买方'或'卖方'的值
+    
     # 确保数据已正确解析
     if strike_price is not None:
         quantity = row['数量']
         market_price = row['市价']
+        position_multiplier = 1 if direction == '买方' else -1  # 买方为正，卖方为负
         
         # 设置每个合约的特定参数
         S = market_price
         T = calculate_time_to_maturity(current_date, expiration_month)  # 假设每月到期日为月底        
+        
         # 计算隐含波动率
         sigma = implied_volatility(S, strike_price, T, r, market_price)
 
         
         # 计算希腊字母值
-        delta_val = delta(S, strike_price, T, r, sigma, option_type)
-        gamma_val = gamma(S, strike_price, T, r, sigma)
-        vega_val = vega(S, strike_price, T, r, sigma)
-        theta_val = theta(S, strike_price, T, r, sigma, option_type)
+        delta_val = delta(S, strike_price, T, r, sigma, option_type) * position_multiplier
+        gamma_val = gamma(S, strike_price, T, r, sigma) * position_multiplier
+        vega_val = vega(S, strike_price, T, r, sigma) * position_multiplier
+        theta_val = theta(S, strike_price, T, r, sigma, option_type) * position_multiplier
 
         # 累加总希腊字母值
         total_delta += quantity * delta_val
@@ -123,11 +126,12 @@ for index, row in tqdm(excel_data.iterrows(), total=excel_data.shape[0]):
         # 计算整体收益
         for i, price in enumerate(S_range):
             profit = max(price - strike_price, 0) if option_type == "认购" else max(strike_price - price, 0)
-            overall_profits[i] += quantity * profit
+            overall_profits[i] += quantity * profit * position_multiplier
 
         # 记录持仓
         contracts.append({
             "类型": option_type,
+            "方向": direction,  # 添加方向信息
             "数量": quantity,
             "行权价格": strike_price,
             "市价": market_price,
